@@ -16,7 +16,18 @@ export default function ProductCard({ product }) {
   const { darkMode } = useTheme();
   const [isAdding, setIsAdding] = useState(false);
   const [inWishlist, setInWishlist] = useState(false);
-  const [imgSrc, setImgSrc] = useState(product.image_url || FALLBACK_IMAGE);
+  const deriveImage = (p) => {
+    if (!p) return FALLBACK_IMAGE;
+    if (p.image_url && p.image_url.trim() !== '') return p.image_url.trim();
+    if (p.imageUrls && p.imageUrls.trim() !== '') return p.imageUrls.split(',')[0].trim();
+    return FALLBACK_IMAGE;
+  };
+
+  const [imgSrc, setImgSrc] = useState(deriveImage(product));
+
+  useEffect(() => {
+    setImgSrc(deriveImage(product));
+  }, [product]);
 
   const handleAddToCart = async (e) => {
     e.preventDefault();

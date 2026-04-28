@@ -60,6 +60,9 @@ export default function Orders() {
       setCancellingId(id);
       try {
         await api.put(`/orders/${id}/cancel`, { reason: 'Customer requested' });
+        setOrders((prev) => prev.map((o) => (
+          o.id === id ? { ...o, status: 'CANCELLED', cancel_reason: 'Customer requested' } : o
+        )));
         toast.success("Order cancelled");
         fetchOrders();
       } catch (error) {
@@ -70,13 +73,25 @@ export default function Orders() {
     }
   };
 
+  const normalizeOrderStatus = (status) => {
+    const normalized = String(status || '').toUpperCase();
+    if (normalized === 'PENDING') return 'PROCESSING';
+    if (normalized === 'CONFIRMED') return 'PLACED';
+    return normalized;
+  };
+
+  const canCancelOrder = (status) => {
+    const normalized = normalizeOrderStatus(status);
+    return normalized === 'PLACED' || normalized === 'PROCESSING';
+  };
+
   const getStatusInfo = (status) => {
-    switch(status) {
-      case 'pending': return { icon: <FiClock />, color: 'text-amber-500', bg: 'bg-amber-50', label: 'Processing' };
-      case 'confirmed': return { icon: <FiCheckCircle />, color: 'text-blue-500', bg: 'bg-blue-50', label: 'Confirmed' };
-      case 'shipped': return { icon: <FiTruck />, color: 'text-indigo-500', bg: 'bg-indigo-50', label: 'Shipped' };
-      case 'delivered': return { icon: <FiBox />, color: 'text-green-500', bg: 'bg-green-50', label: 'Delivered' };
-      case 'cancelled': return { icon: <FiXCircle />, color: 'text-red-500', bg: 'bg-red-50', label: 'Cancelled' };
+    switch(normalizeOrderStatus(status)) {
+      case 'PROCESSING': return { icon: <FiClock />, color: 'text-amber-500', bg: 'bg-amber-50', label: 'Processing' };
+      case 'PLACED': return { icon: <FiCheckCircle />, color: 'text-blue-500', bg: 'bg-blue-50', label: 'Placed' };
+      case 'SHIPPED': return { icon: <FiTruck />, color: 'text-indigo-500', bg: 'bg-indigo-50', label: 'Shipped' };
+      case 'DELIVERED': return { icon: <FiBox />, color: 'text-green-500', bg: 'bg-green-50', label: 'Delivered' };
+      case 'CANCELLED': return { icon: <FiXCircle />, color: 'text-red-500', bg: 'bg-red-50', label: 'Cancelled' };
       default: return { icon: <FiClock />, color: 'text-gray-500', bg: 'bg-gray-50', label: status };
     }
   };
@@ -162,12 +177,12 @@ export default function Orders() {
                           </div>
                           <div>
                             <h3 className={`font-semibold text-lg ${sInfo.color}`}>{sInfo.label}</h3>
-                            {order.status !== 'cancelled' && order.delivery_date && (
+                            {normalizeOrderStatus(order.status) !== 'CANCELLED' && order.delivery_date && (
                               <p className="text-sm text-gray-600">
-                                {order.status === 'delivered' ? 'Delivered on' : 'Expected delivery by'} {new Date(order.delivery_date).toLocaleDateString()}
+                                {normalizeOrderStatus(order.status) === 'DELIVERED' ? 'Delivered on' : 'Expected delivery by'} {new Date(order.delivery_date).toLocaleDateString()}
                               </p>
                             )}
-                            {order.status === 'cancelled' && (
+                            {normalizeOrderStatus(order.status) === 'CANCELLED' && (
                               <p className="text-sm text-gray-600 text-red-500">Reason: {order.cancel_reason}</p>
                             )}
                           </div>
@@ -188,7 +203,7 @@ export default function Orders() {
                               </div>
                               <div className="text-right">
                                 <p className="font-medium text-gray-900">₹{item.price}</p>
-                                {order.status === 'delivered' && (
+                                {normalizeOrderStatus(order.status) === 'DELIVERED' && (
                                   <Link to={`/products/${item.product_id}`} className="text-sm text-primary-600 hover:underline mt-2 inline-block">
                                     Write a review
                                   </Link>
@@ -220,11 +235,21 @@ export default function Orders() {
                                  <div className="flex justify-between"><span>Shipping</span><span>₹{order.shipping}</span></div>
                                  {Number(order.discount) > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-₹{order.discount}</span></div>}
                                  <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-200"><span>Total</span><span>₹{order.total}</span></div>
+                                 {canCancelOrder(order.status) && (
+                                   <button
+                                     type="button"
+                                     onClick={() => handleCancelOrder(order.id, order.created_at)}
+                                     disabled={cancellingId === order.id}
+                                     className="cancel-order-btn"
+                                   >
+                                     {cancellingId === order.id ? 'Cancelling...' : 'Cancel Order'}
+                                   </button>
+                                 )}
                                </div>
                              </div>
                            </div>
                            
-                           {(order.status === 'pending' || order.status === 'confirmed') && (
+                           {canCancelOrder(order.status) && (
                              <div className="px-6 pb-6 pt-2 flex flex-wrap gap-3 justify-end border-t border-gray-100 mt-4">
                                {((Date.now() - new Date(order.created_at).getTime()) / 3600000) <= 6 && (
                                  <button 
@@ -232,15 +257,6 @@ export default function Orders() {
                                    className="text-sm text-primary-700 bg-white border border-primary-200 hover:bg-primary-50 px-5 py-2.5 rounded-lg font-medium transition-colors shadow-sm"
                                  >
                                    Edit Shipping Address
-                                 </button>
-                               )}
-                               {((Date.now() - new Date(order.created_at).getTime()) / 3600000) <= 24 && (
-                                 <button 
-                                   onClick={() => handleCancelOrder(order.id, order.created_at)}
-                                   disabled={cancellingId === order.id}
-                                   className="text-sm text-red-600 bg-white border border-red-200 hover:bg-red-50 px-5 py-2.5 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50"
-                                 >
-                                   {cancellingId === order.id ? 'Cancelling...' : 'Cancel Order'}
                                  </button>
                                )}
                              </div>
